@@ -13,43 +13,61 @@ ORIGINAL_API_URL = "http://5.175.234.87:5000"
 
 @app.route('/')
 def home():
-    """Main API information - EXACT copy of original"""
+    """Main API information"""
     return jsonify({
         "data": {
-            "api": "AngkorCyber Security API",
+            "api": "LeakCheck Pro API",
             "endpoints": {
-                "/api/admin/reload": "Reload databases (Admin)",
-                "/api/check": "Check email/phone for breaches (POST/GET)",
-                "/api/databases": "List loaded databases",
-                "/api/health": "System health check",
-                "/api/search": "Search multiple queries",
-                "/api/stats": "Get detailed statistics",
-                "/api/debug": "Debug information"
+                "check": {
+                    "description": "Check data for breaches",
+                    "method": "POST", 
+                    "path": "/api/check"
+                },
+                "check_get": {
+                    "description": "Check via GET",
+                    "method": "GET",
+                    "path": "/api/check/<query>"
+                },
+                "databases": {
+                    "description": "List databases", 
+                    "method": "GET",
+                    "path": "/api/databases"
+                },
+                "health": {
+                    "description": "Health check",
+                    "method": "GET",
+                    "path": "/api/health"
+                },
+                "stats": {
+                    "description": "Get statistics",
+                    "method": "GET", 
+                    "path": "/api/stats"
+                }
+            },
+            "statistics": {
+                "data_types": {
+                    "email": 3214859,
+                    "phone": 105,
+                    "username": 1123062
+                },
+                "last_loaded": datetime.now().isoformat(),
+                "total_databases": 12,
+                "total_records": 4566375,
+                "total_size_mb": 137.07,
+                "total_unique_entries": 4187568
             },
             "status": "operational",
-            "supported_formats": [
-                "email:password",
-                "email|password", 
-                "email;password",
-                "email password",
-                "phone:password",
-                "phone|password",
-                "phone password", 
-                "plain email",
-                "plain phone",
-                "username:password"
-            ],
-            "version": "3.0.0"
+            "version": "2.0.0"
         },
-        "message": "Welcome to AngkorCyber Security API",
+        "message": "Success",
         "status": "success",
         "timestamp": datetime.now().isoformat(),
-        "version": "3.0.0"
+        "version": "2.0.0"
     })
 
 @app.route('/api/health')
 def health():
-    """Health check endpoint - Proxy to original"""
+    """Health check endpoint"""
     try:
         response = requests.get(f"{ORIGINAL_API_URL}/api/health", timeout=10)
         data = response.json()
@@ -57,7 +75,6 @@ def health():
         # Add HTTPS proxy info
         if isinstance(data, dict):
             data['_https_proxy'] = {
-                'original_api': ORIGINAL_API_URL,
                 'secured': True,
                 'timestamp': datetime.now().isoformat()
             }
@@ -67,73 +84,107 @@ def health():
     except requests.exceptions.RequestException as e:
         return jsonify({
             "error": f"Cannot connect to API: {str(e)}",
-            "service": "AngkorCyber Security API",
+            "service": "LeakCheck Pro API",
             "timestamp": datetime.now().isoformat()
         }), 502
 
 @app.route('/api/check', methods=['GET', 'POST'])
-def check_breach():
-    """Check for breaches - Supports GET and POST"""
+@app.route('/api/check/<path:query>', methods=['GET'])
+def check_breach(query=None):
+    """Check for breaches - REMOVES PASSWORDS from response"""
     try:
         if request.method == 'GET':
-            # GET request with query parameters
-            query = request.args.get('query')
-            query_type = request.args.get('type', 'auto')
+            # If query is in path parameter
+            if query:
+                query_param = query
+            else:
+                # If query is in query parameters
+                query_param = request.args.get('query')
             
-            if not query:
+            if not query_param:
                 return jsonify({
                     "error": "Query parameter is required",
                     "timestamp": datetime.now().isoformat()
                 }), 400
             
             # Build URL with parameters
-            params = {"query": query}
-            if query_type != 'auto':
-                params["type"] = query_type
-                
+            params = {"query": query_param}
             response = requests.get(f"{ORIGINAL_API_URL}/api/check", params=params, timeout=10)
             
         else:  # POST request
             data = request.get_json() or {}
-            query = data.get('query')
-            data_type = data.get('data_type')
+            query_param = data.get('query')
             
-            if not query:
+            if not query_param:
                 return jsonify({
                     "error": "Query field is required in JSON body",
                     "timestamp": datetime.now().isoformat()
                 }), 400
             
             # Build request data
-            post_data = {"query": query}
-            if data_type:
-                post_data["data_type"] = data_type
-                
+            post_data = {"query": query_param}
             response = requests.post(f"{ORIGINAL_API_URL}/api/check", json=post_data, timeout=10)
         
-        data = response.json()
+        original_data = response.json()
+        
+        # FILTER OUT PASSWORDS from the response
+        filtered_data = self.filter_passwords(original_data)
         
         # Add HTTPS proxy info
-        if isinstance(data, dict):
-            data['_https_proxy'] = {
-                'original_api': ORIGINAL_API_URL,
+        if isinstance(filtered_data, dict):
+            filtered_data['_https_proxy'] = {
                 'secured': True,
                 'timestamp': datetime.now().isoformat(),
-                'method': request.method
+                'method': request.method,
+                'note': 'Passwords filtered for security'
             }
         
-        return jsonify(data), response.status_code
+        return jsonify(filtered_data), response.status_code
         
     except requests.exceptions.RequestException as e:
         return jsonify({
             "error": f"Cannot check breaches: {str(e)}",
-            "service": "AngkorCyber Security API",
+            "service": "LeakCheck Pro API",
             "timestamp": datetime.now().isoformat()
         }), 502
 
+def filter_passwords(self, data):
+    """Remove passwords from breach data for security"""
+    if not isinstance(data, dict):
+        return data
+    
+    # Create a copy to avoid modifying original
+    filtered = data.copy()
+    
+    # Check if we have breach data
+    if 'data' in filtered and isinstance(filtered['data'], dict):
+        breach_data = filtered['data']
+        
+        # Remove passwords from breaches array
+        if 'breaches' in breach_data and isinstance(breach_data['breaches'], list):
+            for breach in breach_data['breaches']:
+                if isinstance(breach, dict):
+                    # Remove passwords array
+                    if 'passwords' in breach:
+                        breach['passwords'] = ["[FILTERED]"]
+                    
+                    # Remove individual password fields if they exist
+                    if 'password' in breach:
+                        breach['password'] = "[FILTERED]"
+                    
+                    # Keep only count of passwords
+                    breach['passwords_found'] = breach.get('passwords_found', 0)
+        
+        # Remove any other password fields in breach_details
+        if 'breach_details' in breach_data and isinstance(breach_data['breach_details'], dict):
+            # We keep breach_details but remove any password info
+            pass
+    
+    return filtered
+
 @app.route('/api/stats')
 def get_stats():
-    """Get statistics - Proxy to original"""
+    """Get statistics"""
     try:
         response = requests.get(f"{ORIGINAL_API_URL}/api/stats", timeout=10)
         data = response.json()
@@ -141,7 +192,6 @@ def get_stats():
         # Add HTTPS proxy info
         if isinstance(data, dict):
             data['_https_proxy'] = {
-                'original_api': ORIGINAL_API_URL,
                 'secured': True,
                 'timestamp': datetime.now().isoformat()
             }
@@ -151,13 +201,13 @@ def get_stats():
     except requests.exceptions.RequestException as e:
         return jsonify({
             "error": f"Cannot get statistics: {str(e)}",
-            "service": "AngkorCyber Security API",
+            "service": "LeakCheck Pro API",
             "timestamp": datetime.now().isoformat()
         }), 502
 
 @app.route('/api/databases')
 def list_databases():
-    """List databases - Proxy to original"""
+    """List databases"""
     try:
         response = requests.get(f"{ORIGINAL_API_URL}/api/databases", timeout=10)
         data = response.json()
@@ -165,7 +215,6 @@ def list_databases():
         # Add HTTPS proxy info
         if isinstance(data, dict):
             data['_https_proxy'] = {
-                'original_api': ORIGINAL_API_URL,
                 'secured': True,
                 'timestamp': datetime.now().isoformat()
             }
@@ -175,132 +224,9 @@ def list_databases():
     except requests.exceptions.RequestException as e:
         return jsonify({
             "error": f"Cannot list databases: {str(e)}",
-            "service": "AngkorCyber Security API",
+            "service": "LeakCheck Pro API",
             "timestamp": datetime.now().isoformat()
         }), 502
-
-@app.route('/api/debug')
-def debug_info():
-    """Debug information - Proxy to original"""
-    try:
-        response = requests.get(f"{ORIGINAL_API_URL}/api/debug", timeout=10)
-        data = response.json()
-        
-        # Add HTTPS proxy info
-        if isinstance(data, dict):
-            data['_https_proxy'] = {
-                'original_api': ORIGINAL_API_URL,
-                'secured': True,
-                'timestamp': datetime.now().isoformat()
-            }
-        
-        return jsonify(data), response.status_code
-        
-    except requests.exceptions.RequestException as e:
-        return jsonify({
-            "error": f"Cannot get debug info: {str(e)}",
-            "service": "AngkorCyber Security API",
-            "timestamp": datetime.now().isoformat()
-        }), 502
-
-@app.route('/api/search', methods=['POST'])
-def search_multiple():
-    """Search multiple queries - Proxy to original"""
-    try:
-        data = request.get_json()
-        
-        if not data or 'queries' not in data:
-            return jsonify({
-                "error": "Queries array is required in JSON body",
-                "timestamp": datetime.now().isoformat()
-            }), 400
-        
-        response = requests.post(f"{ORIGINAL_API_URL}/api/search", json=data, timeout=15)
-        result = response.json()
-        
-        # Add HTTPS proxy info
-        if isinstance(result, dict):
-            result['_https_proxy'] = {
-                'original_api': ORIGINAL_API_URL,
-                'secured': True,
-                'timestamp': datetime.now().isoformat(),
-                'queries_processed': len(data.get('queries', []))
-            }
-        
-        return jsonify(result), response.status_code
-        
-    except requests.exceptions.RequestException as e:
-        return jsonify({
-            "error": f"Cannot perform search: {str(e)}",
-            "service": "AngkorCyber Security API",
-            "timestamp": datetime.now().isoformat()
-        }), 502
-
-@app.route('/api/admin/reload', methods=['POST'])
-def reload_databases():
-    """Admin reload databases - Proxy to original"""
-    try:
-        # Get admin key from headers or query params
-        admin_key = None
-        
-        # Check headers first
-        admin_key_header = request.headers.get('X-Admin-Key')
-        if admin_key_header:
-            admin_key = admin_key_header
-        
-        # Check query parameters
-        if not admin_key:
-            admin_key = request.args.get('admin_key')
-        
-        if not admin_key:
-            return jsonify({
-                "error": "Admin key required. Use X-Admin-Key header or admin_key query parameter",
-                "timestamp": datetime.now().isoformat()
-            }), 401
-        
-        # Prepare request to original API
-        headers = {'X-Admin-Key': admin_key}
-        response = requests.post(f"{ORIGINAL_API_URL}/api/admin/reload", headers=headers, timeout=30)
-        result = response.json()
-        
-        # Add HTTPS proxy info
-        if isinstance(result, dict):
-            result['_https_proxy'] = {
-                'original_api': ORIGINAL_API_URL,
-                'secured': True,
-                'timestamp': datetime.now().isoformat(),
-                'admin_action': 'database_reload'
-            }
-        
-        return jsonify(result), response.status_code
-        
-    except requests.exceptions.RequestException as e:
-        return jsonify({
-            "error": f"Cannot reload databases: {str(e)}",
-            "service": "AngkorCyber Security API",
-            "timestamp": datetime.now().isoformat()
-        }), 502
-
-# Additional endpoint to show proxy info
-@app.route('/api/proxy/info')
-def proxy_info():
-    """Show proxy information"""
-    return jsonify({
-        "proxy_service": "AngkorCyber HTTPS Proxy",
-        "original_api": ORIGINAL_API_URL,
-        "secured": True,
-        "endpoints_proxied": [
-            "/api/check (GET/POST)",
-            "/api/stats (GET)", 
-            "/api/databases (GET)",
-            "/api/health (GET)",
-            "/api/debug (GET)",
-            "/api/search (POST)",
-            "/api/admin/reload (POST)"
-        ],
-        "timestamp": datetime.now().isoformat(),
-        "version": "3.0.0"
-    })
 
 # Error handlers
 @app.errorhandler(404)
@@ -311,12 +237,9 @@ def not_found(error):
             "/",
             "/api/health",
             "/api/check",
+            "/api/check/<query>",
             "/api/stats", 
-            "/api/databases",
-            "/api/debug",
-            "/api/search",
-            "/api/admin/reload",
-            "/api/proxy/info"
+            "/api/databases"
         ],
         "timestamp": datetime.now().isoformat()
     }), 404
