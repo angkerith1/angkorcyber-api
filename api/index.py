@@ -1,87 +1,89 @@
-from http.server import BaseHTTPRequestHandler
 import requests
 import json
-import urllib.parse
 from datetime import datetime
+import traceback
 
-class AngkorProxyHandler(BaseHTTPRequestHandler):
+def handler(request, context):
+    """Vercel serverless function handler"""
+    print(f"Received request: {request.get('httpMethod', 'UNKNOWN')} {request.get('path', 'UNKNOWN')}")
     
-    # API Configuration
-    API_CONFIG = {
-        "angkor": {
-            "base_url": "http://5.175.234.87:5000",
-            "endpoints": {
-                "/": "API Information",
-                "/api/health": "Health Check",
-                "/api/databases": "List Databases",
-                "/api/check": "Check Breaches",
-                "/api/stats": "Get Statistics",
-                "/api/search": "Search Multiple",
-                "/api/admin/reload": "Admin Reload"
-            }
-        },
-        "json": {
-            "base_url": "https://jsonplaceholder.typicode.com",
-            "endpoints": {
-                "/users": "Get Users",
-                "/posts": "Get Posts",
-                "/comments": "Get Comments"
+    try:
+        # Extract request details
+        method = request.get('httpMethod', 'GET')
+        path = request.get('path', '/')
+        query_params = request.get('queryStringParameters', {}) or {}
+        headers = request.get('headers', {})
+        body = request.get('body', '')
+        
+        print(f"Processing: {method} {path}")
+        
+        # Create API handler
+        api_handler = AngkorProxyHandler()
+        
+        # Route the request
+        if path == '/' or path == '':
+            return api_handler.serve_api_info()
+        elif path.startswith('/api/angkor'):
+            return api_handler.proxy_angkor_api(path, method, query_params, body, headers)
+        elif path.startswith('/api/json'):
+            return api_handler.proxy_json_api(path, method, query_params, body, headers)
+        elif path == '/api/proxy':
+            return api_handler.handle_universal_proxy(method, query_params)
+        elif path == '/api/health':
+            return api_handler.serve_health_check()
+        elif path == '/api/services':
+            return api_handler.serve_services_list()
+        else:
+            return api_handler.send_error_response(404, "Endpoint not found")
+            
+    except Exception as e:
+        print(f"CRITICAL ERROR: {str(e)}")
+        print(traceback.format_exc())
+        
+        # Return a simple error response
+        return {
+            'statusCode': 500,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            },
+            'body': json.dumps({
+                "error": "Internal server error",
+                "message": str(e),
+                "timestamp": datetime.now().isoformat()
+            })
+        }
+
+class AngkorProxyHandler:
+    """Main API handler"""
+    
+    def __init__(self):
+        self.API_CONFIG = {
+            "angkor": {
+                "base_url": "http://5.175.234.87:5000",
+                "endpoints": {
+                    "/": "API Information",
+                    "/api/health": "Health Check",
+                    "/api/databases": "List Databases",
+                    "/api/check": "Check Breaches",
+                    "/api/stats": "Get Statistics",
+                    "/api/search": "Search Multiple",
+                    "/api/admin/reload": "Admin Reload"
+                }
+            },
+            "json": {
+                "base_url": "https://jsonplaceholder.typicode.com",
+                "endpoints": {
+                    "/users": "Get Users",
+                    "/posts": "Get Posts",
+                    "/comments": "Get Comments"
+                }
             }
         }
-    }
-
-    def do_GET(self):
-        """Handle GET requests"""
-        self.handle_request('GET')
-
-    def do_POST(self):
-        """Handle POST requests"""
-        self.handle_request('POST')
-
-    def do_OPTIONS(self):
-        """Handle CORS preflight requests"""
-        self.send_response(200)
-        self.send_cors_headers()
-        self.end_headers()
-
-    def send_cors_headers(self):
-        """Send CORS headers"""
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With')
-
-    def handle_request(self, method):
-        """Main request handler"""
-        try:
-            parsed_path = urllib.parse.urlparse(self.path)
-            path = parsed_path.path
-            query_params = urllib.parse.parse_qs(parsed_path.query)
-
-            # Remove trailing slash
-            if path.endswith('/') and len(path) > 1:
-                path = path[:-1]
-
-            # Route requests
-            if path == '' or path == '/':
-                self.serve_api_info()
-            elif path.startswith('/api/angkor'):
-                self.proxy_angkor_api(path, method, query_params)
-            elif path.startswith('/api/json'):
-                self.proxy_json_api(path, method, query_params)
-            elif path == '/api/proxy':
-                self.handle_universal_proxy(method, query_params)
-            elif path == '/api/health':
-                self.serve_health_check()
-            elif path == '/api/services':
-                self.serve_services_list()
-            else:
-                self.send_error_response(404, "Endpoint not found")
-
-        except Exception as e:
-            self.send_error_response(500, f"Internal server error: {str(e)}")
 
     def serve_api_info(self):
         """Serve API information"""
+        print("Serving API info")
         api_info = {
             "data": {
                 "api": "AngkorCyber Security API - HTTPS Gateway",
@@ -109,20 +111,23 @@ class AngkorProxyHandler(BaseHTTPRequestHandler):
             "timestamp": datetime.now().isoformat(),
             "version": "3.0.0"
         }
-        self.send_json_response(200, api_info)
+        return self.send_json_response(200, api_info)
 
     def serve_health_check(self):
         """Serve health check"""
+        print("Serving health check")
         health_info = {
             "status": "healthy",
             "service": "AngkorCyber HTTPS Gateway",
             "timestamp": datetime.now().isoformat(),
-            "version": "3.0.0"
+            "version": "3.0.0",
+            "environment": "production"
         }
-        self.send_json_response(200, health_info)
+        return self.send_json_response(200, health_info)
 
     def serve_services_list(self):
         """List all available services"""
+        print("Serving services list")
         services = {}
         for service_name, config in self.API_CONFIG.items():
             services[service_name] = {
@@ -133,12 +138,15 @@ class AngkorProxyHandler(BaseHTTPRequestHandler):
         
         response = {
             "services": services,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
+            "total_services": len(services)
         }
-        self.send_json_response(200, response)
+        return self.send_json_response(200, response)
 
-    def proxy_angkor_api(self, path, method, query_params):
+    def proxy_angkor_api(self, path, method, query_params, body, headers):
         """Proxy to AngkorCyber API"""
+        print(f"Proxying to Angkor API: {path}")
+        
         path_mapping = {
             '/api/angkor': '/',
             '/api/angkor/health': '/api/health',
@@ -152,14 +160,17 @@ class AngkorProxyHandler(BaseHTTPRequestHandler):
         target_path = path_mapping.get(path, '/')
         target_url = f"http://5.175.234.87:5000{target_path}"
 
+        # Add query parameters
         if query_params:
-            query_string = '&'.join([f"{k}={v[0]}" for k, v in query_params.items()])
+            query_string = '&'.join([f"{k}={v}" for k, v in query_params.items()])
             target_url += '?' + query_string
 
-        self.make_proxy_request(target_url, method, "AngkorCyber API")
+        return self.make_proxy_request(target_url, method, body, headers, "AngkorCyber API")
 
-    def proxy_json_api(self, path, method, query_params):
+    def proxy_json_api(self, path, method, query_params, body, headers):
         """Proxy to JSONPlaceholder API"""
+        print(f"Proxying to JSON API: {path}")
+        
         path_mapping = {
             '/api/json': '/',
             '/api/json/users': '/users',
@@ -171,46 +182,54 @@ class AngkorProxyHandler(BaseHTTPRequestHandler):
         target_url = f"https://jsonplaceholder.typicode.com{target_path}"
 
         if query_params:
-            query_string = '&'.join([f"{k}={v[0]}" for k, v in query_params.items()])
+            query_string = '&'.join([f"{k}={v}" for k, v in query_params.items()])
             target_url += '?' + query_string
 
-        self.make_proxy_request(target_url, method, "JSONPlaceholder API")
+        return self.make_proxy_request(target_url, method, body, headers, "JSONPlaceholder API")
 
     def handle_universal_proxy(self, method, query_params):
         """Handle universal proxy requests"""
+        print("Handling universal proxy")
+        
         if method != 'GET':
-            self.send_error_response(405, "Only GET method supported")
-            return
+            return self.send_error_response(405, "Only GET method supported")
 
-        url = query_params.get('url', [None])[0]
+        url = query_params.get('url')
         if not url:
-            self.send_error_response(400, "URL parameter is required")
-            return
+            return self.send_error_response(400, "URL parameter is required")
 
-        self.make_proxy_request(url, 'GET', "Universal Proxy")
+        return self.make_proxy_request(url, 'GET', '', {}, "Universal Proxy")
 
-    def make_proxy_request(self, target_url, method, service_name):
+    def make_proxy_request(self, target_url, method, body, headers, service_name):
         """Make proxy request to target API"""
+        print(f"Making proxy request to: {target_url}")
+        
         try:
-            headers = {
+            request_headers = {
                 'User-Agent': 'AngkorCyber-HTTPS-Proxy/1.0',
                 'Accept': 'application/json'
             }
 
-            if method == 'GET':
-                response = requests.get(target_url, headers=headers, timeout=10)
-            elif method == 'POST':
-                content_length = int(self.headers.get('Content-Length', 0))
-                post_data = self.rfile.read(content_length) if content_length > 0 else None
-                
-                if post_data:
-                    response = requests.post(target_url, data=post_data, headers=headers, timeout=10)
-                else:
-                    response = requests.post(target_url, headers=headers, timeout=10)
-            else:
-                self.send_error_response(405, f"Method {method} not supported")
-                return
+            # Forward relevant headers
+            if headers.get('content-type'):
+                request_headers['Content-Type'] = headers['content-type']
+            if headers.get('authorization'):
+                request_headers['Authorization'] = headers['authorization']
 
+            timeout = 10
+
+            if method == 'GET':
+                print(f"GET request to {target_url}")
+                response = requests.get(target_url, headers=request_headers, timeout=timeout)
+            elif method == 'POST':
+                print(f"POST request to {target_url}")
+                response = requests.post(target_url, data=body, headers=request_headers, timeout=timeout)
+            else:
+                return self.send_error_response(405, f"Method {method} not supported")
+
+            print(f"Response status: {response.status_code}")
+
+            # Handle response
             if response.status_code == 200:
                 content_type = response.headers.get('content-type', '')
                 
@@ -221,50 +240,75 @@ class AngkorProxyHandler(BaseHTTPRequestHandler):
                             data['_proxy'] = {
                                 'service': service_name,
                                 'secured': True,
-                                'timestamp': datetime.now().isoformat()
+                                'timestamp': datetime.now().isoformat(),
+                                'original_url': target_url
                             }
-                        self.send_json_response(200, data)
-                    except:
-                        self.send_text_response(200, response.text)
+                        return self.send_json_response(200, data)
+                    except Exception as e:
+                        print(f"JSON parse error: {e}")
+                        return self.send_text_response(200, response.text)
                 else:
-                    self.send_text_response(200, response.text)
+                    return self.send_text_response(200, response.text)
             else:
-                self.send_error_response(response.status_code, {
+                return self.send_error_response(response.status_code, {
                     "error": f"Backend service returned {response.status_code}",
-                    "service": service_name
+                    "service": service_name,
+                    "target_url": target_url
                 })
 
         except requests.exceptions.Timeout:
-            self.send_error_response(504, "Gateway timeout")
+            print("Request timeout")
+            return self.send_error_response(504, {
+                "error": "Gateway timeout",
+                "service": service_name
+            })
         except requests.exceptions.RequestException as e:
-            self.send_error_response(502, f"Bad gateway: {str(e)}")
+            print(f"Request error: {e}")
+            return self.send_error_response(502, {
+                "error": f"Bad gateway: {str(e)}",
+                "service": service_name
+            })
+        except Exception as e:
+            print(f"Unexpected error in proxy: {e}")
+            return self.send_error_response(500, {
+                "error": f"Proxy error: {str(e)}",
+                "service": service_name
+            })
 
     def send_json_response(self, status_code, data):
         """Send JSON response"""
-        self.send_response(status_code)
-        self.send_header('Content-type', 'application/json')
-        self.send_cors_headers()
-        self.end_headers()
-        self.wfile.write(json.dumps(data).encode())
+        print(f"Sending JSON response: {status_code}")
+        return {
+            'statusCode': status_code,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+            },
+            'body': json.dumps(data, ensure_ascii=False)
+        }
 
     def send_text_response(self, status_code, text):
         """Send text response"""
-        self.send_response(status_code)
-        self.send_header('Content-type', 'text/plain')
-        self.send_cors_headers()
-        self.end_headers()
-        self.wfile.write(text.encode())
+        print(f"Sending text response: {status_code}")
+        return {
+            'statusCode': status_code,
+            'headers': {
+                'Content-Type': 'text/plain',
+                'Access-Control-Allow-Origin': '*'
+            },
+            'body': text
+        }
 
     def send_error_response(self, status_code, message):
         """Send error response"""
+        print(f"Sending error response: {status_code} - {message}")
+        
         if isinstance(message, dict):
             error_data = message
         else:
             error_data = {"error": message}
         
         error_data["timestamp"] = datetime.now().isoformat()
-        self.send_json_response(status_code, error_data)
-
-# Vercel handler
-def handler(request, context):
-    return AngkorProxyHandler()
+        return self.send_json_response(status_code, error_data)
