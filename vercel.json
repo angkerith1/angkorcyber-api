@@ -4,6 +4,10 @@
     {
       "src": "api/index.py",
       "use": "@vercel/python"
+    },
+    {
+      "src": "api/proxy.py", 
+      "use": "@vercel/python"
     }
   ],
   "routes": [
@@ -11,5 +15,13 @@
       "src": "/(.*)",
       "dest": "/api/index.py"
     }
-  ]
+  ],
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 30
+    },
+    "api/proxy.py": {
+      "maxDuration": 30
+    }
+  }
 }
