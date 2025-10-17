@@ -9,73 +9,57 @@ app = Flask(__name__)
 CORS(app)
 
 # Configuration
-ORIGINAL_API_URL = "http://5.175.234.87:5000"
+CAR_API_URL = "http://5.175.234.87:5000"  # Your car parking API
 
 @app.route('/')
 def home():
     """Main API information"""
     return jsonify({
         "data": {
-            "api": "LeakCheck Pro API",
+            "api": "RithStore-Free Car Parking API",
+            "service": "Free Car Parking Multiplayer Accounts",
             "endpoints": {
-                "check": {
-                    "description": "Check data for breaches",
-                    "method": "POST", 
-                    "path": "/api/check"
-                },
-                "check_get": {
-                    "description": "Check via GET",
+                "car_account": {
+                    "description": "Get free car parking account",
                     "method": "GET",
-                    "path": "/api/check/<query>"
+                    "path": "/api/account"
                 },
-                "databases": {
-                    "description": "List databases", 
+                "car_stats": {
+                    "description": "Get car parking checker statistics",
                     "method": "GET",
-                    "path": "/api/databases"
+                    "path": "/api/stats"
+                },
+                "car_queue": {
+                    "description": "Check car accounts queue",
+                    "method": "GET",
+                    "path": "/api/queue"
                 },
                 "health": {
                     "description": "Health check",
                     "method": "GET",
                     "path": "/api/health"
-                },
-                "stats": {
-                    "description": "Get statistics",
-                    "method": "GET", 
-                    "path": "/api/stats"
                 }
             },
-            "statistics": {
-                "data_types": {
-                    "email": 3214859,
-                    "phone": 105,
-                    "username": 1123062
-                },
-                "last_loaded": datetime.now().isoformat(),
-                "total_databases": 12,
-                "total_records": 4566375,
-                "total_size_mb": 137.07,
-                "total_unique_entries": 4187568
-            },
             "status": "operational",
-            "version": "2.0.0"
+            "version": "1.0.0"
         },
-        "message": "Success",
+        "message": "RithStore-Free Car Parking API Running",
         "status": "success",
         "timestamp": datetime.now().isoformat(),
-        "version": "2.0.0"
+        "version": "1.0.0"
     })
 
 @app.route('/api/health')
 def health():
     """Health check endpoint"""
     try:
-        response = requests.get(f"{ORIGINAL_API_URL}/api/health", timeout=10)
+        response = requests.get(f"{CAR_API_URL}/api/health", timeout=10)
         data = response.json()
         
-        # Add HTTPS proxy info
+        # Add proxy info
         if isinstance(data, dict):
-            data['_https_proxy'] = {
-                'secured': True,
+            data['_proxy'] = {
+                'service': 'car_parking',
                 'timestamp': datetime.now().isoformat()
             }
         
@@ -83,116 +67,45 @@ def health():
         
     except requests.exceptions.RequestException as e:
         return jsonify({
-            "error": f"Cannot connect to API: {str(e)}",
-            "service": "LeakCheck Pro API",
+            "error": f"Cannot connect to Car Parking API: {str(e)}",
+            "service": "Car Parking API",
             "timestamp": datetime.now().isoformat()
         }), 502
 
-@app.route('/api/check', methods=['GET', 'POST'])
-@app.route('/api/check/<path:query>', methods=['GET'])
-def check_breach(query=None):
-    """Check for breaches - REMOVES PASSWORDS from response"""
+@app.route('/api/account')
+def get_car_account():
+    """Get a free car parking account"""
     try:
-        if request.method == 'GET':
-            # If query is in path parameter
-            if query:
-                query_param = query
-            else:
-                # If query is in query parameters
-                query_param = request.args.get('query')
-            
-            if not query_param:
-                return jsonify({
-                    "error": "Query parameter is required",
-                    "timestamp": datetime.now().isoformat()
-                }), 400
-            
-            # Build URL with parameters
-            params = {"query": query_param}
-            response = requests.get(f"{ORIGINAL_API_URL}/api/check", params=params, timeout=10)
-            
-        else:  # POST request
-            data = request.get_json() or {}
-            query_param = data.get('query')
-            
-            if not query_param:
-                return jsonify({
-                    "error": "Query field is required in JSON body",
-                    "timestamp": datetime.now().isoformat()
-                }), 400
-            
-            # Build request data
-            post_data = {"query": query_param}
-            response = requests.post(f"{ORIGINAL_API_URL}/api/check", json=post_data, timeout=10)
+        response = requests.get(f"{CAR_API_URL}/api/account", timeout=10)
+        data = response.json()
         
-        original_data = response.json()
-        
-        # FILTER OUT PASSWORDS from the response
-        filtered_data = self.filter_passwords(original_data)
-        
-        # Add HTTPS proxy info
-        if isinstance(filtered_data, dict):
-            filtered_data['_https_proxy'] = {
-                'secured': True,
-                'timestamp': datetime.now().isoformat(),
-                'method': request.method,
-                'note': 'Passwords filtered for security'
+        # Add proxy info
+        if isinstance(data, dict):
+            data['_proxy'] = {
+                'service': 'car_parking',
+                'timestamp': datetime.now().isoformat()
             }
         
-        return jsonify(filtered_data), response.status_code
+        return jsonify(data), response.status_code
         
     except requests.exceptions.RequestException as e:
         return jsonify({
-            "error": f"Cannot check breaches: {str(e)}",
-            "service": "LeakCheck Pro API",
+            "error": f"Cannot get car account: {str(e)}",
+            "service": "Car Parking API",
             "timestamp": datetime.now().isoformat()
         }), 502
-
-def filter_passwords(self, data):
-    """Remove passwords from breach data for security"""
-    if not isinstance(data, dict):
-        return data
-    
-    # Create a copy to avoid modifying original
-    filtered = data.copy()
-    
-    # Check if we have breach data
-    if 'data' in filtered and isinstance(filtered['data'], dict):
-        breach_data = filtered['data']
-        
-        # Remove passwords from breaches array
-        if 'breaches' in breach_data and isinstance(breach_data['breaches'], list):
-            for breach in breach_data['breaches']:
-                if isinstance(breach, dict):
-                    # Remove passwords array
-                    if 'passwords' in breach:
-                        breach['passwords'] = ["[FILTERED]"]
-                    
-                    # Remove individual password fields if they exist
-                    if 'password' in breach:
-                        breach['password'] = "[FILTERED]"
-                    
-                    # Keep only count of passwords
-                    breach['passwords_found'] = breach.get('passwords_found', 0)
-        
-        # Remove any other password fields in breach_details
-        if 'breach_details' in breach_data and isinstance(breach_data['breach_details'], dict):
-            # We keep breach_details but remove any password info
-            pass
-    
-    return filtered
 
 @app.route('/api/stats')
-def get_stats():
-    """Get statistics"""
+def get_car_stats():
+    """Get car parking checker statistics"""
     try:
-        response = requests.get(f"{ORIGINAL_API_URL}/api/stats", timeout=10)
+        response = requests.get(f"{CAR_API_URL}/api/stats", timeout=10)
         data = response.json()
         
-        # Add HTTPS proxy info
+        # Add proxy info
         if isinstance(data, dict):
-            data['_https_proxy'] = {
-                'secured': True,
+            data['_proxy'] = {
+                'service': 'car_parking',
                 'timestamp': datetime.now().isoformat()
             }
         
@@ -200,22 +113,22 @@ def get_stats():
         
     except requests.exceptions.RequestException as e:
         return jsonify({
-            "error": f"Cannot get statistics: {str(e)}",
-            "service": "LeakCheck Pro API",
+            "error": f"Cannot get car stats: {str(e)}",
+            "service": "Car Parking API",
             "timestamp": datetime.now().isoformat()
         }), 502
 
-@app.route('/api/databases')
-def list_databases():
-    """List databases"""
+@app.route('/api/queue')
+def get_car_queue():
+    """Check car accounts queue"""
     try:
-        response = requests.get(f"{ORIGINAL_API_URL}/api/databases", timeout=10)
+        response = requests.get(f"{CAR_API_URL}/api/queue", timeout=10)
         data = response.json()
         
-        # Add HTTPS proxy info
+        # Add proxy info
         if isinstance(data, dict):
-            data['_https_proxy'] = {
-                'secured': True,
+            data['_proxy'] = {
+                'service': 'car_parking',
                 'timestamp': datetime.now().isoformat()
             }
         
@@ -223,8 +136,8 @@ def list_databases():
         
     except requests.exceptions.RequestException as e:
         return jsonify({
-            "error": f"Cannot list databases: {str(e)}",
-            "service": "LeakCheck Pro API",
+            "error": f"Cannot get car queue: {str(e)}",
+            "service": "Car Parking API",
             "timestamp": datetime.now().isoformat()
         }), 502
 
@@ -236,11 +149,11 @@ def not_found(error):
         "available_endpoints": [
             "/",
             "/api/health",
-            "/api/check",
-            "/api/check/<query>",
-            "/api/stats", 
-            "/api/databases"
+            "/api/account", 
+            "/api/stats",
+            "/api/queue"
         ],
+        "service": "RithStore-Free Car Parking API",
         "timestamp": datetime.now().isoformat()
     }), 404
 
@@ -249,9 +162,26 @@ def internal_error(error):
     return jsonify({
         "error": "Internal server error",
         "message": "Please try again later",
+        "service": "RithStore-Free Car Parking API",
         "timestamp": datetime.now().isoformat()
     }), 500
 
+@app.errorhandler(405)
+def method_not_allowed(error):
+    return jsonify({
+        "error": "Method not allowed",
+        "message": "Check the endpoint documentation for allowed methods",
+        "timestamp": datetime.now().isoformat()
+    }), 405
+
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
+    port = int(os.environ.get('PORT', 5001))  # Using 5001 to avoid conflict
+    print(f"🚗 RithStore-Free Car Parking API Gateway starting on port {port}")
+    print(f"🎮 Car Parking API: {CAR_API_URL}")
+    print(f"🌐 Gateway URL: http://0.0.0.0:{port}")
+    print(f"📋 Available endpoints:")
+    print(f"   GET  /api/health  - Health check")
+    print(f"   GET  /api/account - Get free account") 
+    print(f"   GET  /api/stats   - Get statistics")
+    print(f"   GET  /api/queue   - Check queue")
     app.run(host='0.0.0.0', port=port, debug=False)
